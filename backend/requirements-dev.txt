@@ -1,0 +1,13 @@
+# Additional dependencies for local development and testing only.
+-r requirements.txt
+
+pytest==9.0.3
+pytest-cov==6.0.0
+fakeredis==2.26.2
+ruff==0.8.4
+
+# Security auditing. Added because the project had 31 known advisories
+# across 4 packages -- including 12 in the JWT library -- and nothing in
+# the toolchain would ever have said so.
+pip-audit==2.9.0
+bandit==1.9.4

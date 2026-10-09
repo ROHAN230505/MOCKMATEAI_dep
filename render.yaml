@@ -1,0 +1,63 @@
+# Render blueprint for the MockMateAI backend.
+#
+# Deploys the API only. The frontend is static and goes to Netlify
+# (netlify.toml); Postgres and Redis are external free tiers (Neon and
+# Upstash) rather than Render's own, because Render's free Postgres expires
+# after 90 days and Neon's does not.
+#
+# See DEPLOYMENT.md for the values to paste into each of these.
+
+services:
+  - type: web
+    name: mockmateai-api
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # Migrations run on every start, not as a build step: the build has no
+    # database credentials on Render, and `alembic upgrade head` is idempotent,
+    # so a restart that changes nothing costs one query.
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: MOCKMATEAI_ENV
+        value: production
+
+      # --- secrets: set these in the Render dashboard, never in git ---
+      # Neon connection string. Must start postgresql+psycopg:// for SQLAlchemy,
+      # not the postgresql:// Neon shows you.
+      - key: MOCKMATEAI_DB_URL
+        sync: false
+      # Upstash redis:// URL (the TCP one, not the REST endpoint).
+      - key: MOCKMATEAI_REDIS_URL
+        sync: false
+      # The PEM contents, not paths -- there is no dev_keys/ directory here.
+      - key: MOCKMATEAI_JWT_PRIVATE_KEY
+        sync: false
+      - key: MOCKMATEAI_JWT_PUBLIC_KEY
+        sync: false
+      - key: MOCKMATEAI_REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: MOCKMATEAI_LLM_API_KEY
+        sync: false
+
+      # --- the two that must name the real frontend domain ---
+      # A mismatch here is the most common deploy failure: the browser blocks
+      # the request and the console blames CORS, which is accurate and
+      # unhelpful.
+      - key: MOCKMATEAI_CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: MOCKMATEAI_FRONTEND_URL
+        sync: false
+
+      # --- Google OAuth. Leave unset to ship with email/password only ---
+      - key: MOCKMATEAI_GOOGLE_CLIENT_ID
+        sync: false
+      - key: MOCKMATEAI_GOOGLE_CLIENT_SECRET
+        sync: false
+      # Must match a redirect URI registered in Google Cloud Console exactly.
+      - key: MOCKMATEAI_OAUTH_REDIRECT_URI
+        sync: false

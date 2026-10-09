@@ -1,0 +1,37 @@
+# Local development datastores only (Section 13: "don't over-engineer this
+# if the deployment target is a demo, not production traffic"). Backend and
+# frontend are run directly (uvicorn / vite) against these, not
+# containerized here — see README.md for the full local setup.
+name: mockmateai
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mockmateai
+      POSTGRES_PASSWORD: mockmateai
+      POSTGRES_DB: mockmateai
+    ports:
+      - "5432:5432"
+    volumes:
+      - mockmateai_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mockmateai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mockmateai_postgres_data:

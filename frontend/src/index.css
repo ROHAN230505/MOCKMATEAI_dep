@@ -1,0 +1,879 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens (Section 5.4): a constrained set — one accent family used
+ * sparingly for primary actions/focus states, a small spacing/radius scale,
+ * and a limited type scale. Every screen pulls from these instead of ad hoc
+ * values.
+ *
+ * Two themes share one token contract: `.dark` on <html> selects the black,
+ * its absence selects the warm off-white. Almost nothing in the app references a
+ * raw hex — a component styled with `bg-surface text-text` is correct in both
+ * themes by construction, which is what makes the theme switch a one-class flip
+ * rather than a per-component audit. The exceptions are listed in
+ * `scripts/verify-theme-contrast.mjs`.
+ *
+ * Palette direction: near-black and plum with rose, cream and sage with gold.
+ *
+ * Two supplied four-colour palettes, assigned by what each theme can
+ * physically carry rather than by taste. Dark takes #1A1A1D as the page,
+ * #3B1C32 and #6A1E55 as the surface ramp, #A64D79 as interaction. Light
+ * takes #F7F4ED as the page, #C7D3C0 and #8FA28A as its hairlines — the
+ * nicest thing that palette does, because structure ends up carried by a
+ * colour instead of by grey — and #C8A96B as interaction.
+ *
+ * Four values are derived, and only where the palettes cannot supply them:
+ * text in both themes (neither set contains anything readable against its
+ * own page), and the two accents. #A64D79 measures 3.27:1 on #1A1A1D and
+ * #C8A96B measures 2.05:1 on #F7F4ED, so neither can be a link or an icon
+ * as given; each is lifted or darkened along its own hue until it can, and
+ * the palette value keeps its place as accent-2, where gradients and chart
+ * ink read it. Status colours are derived too — see the note on them, which
+ * is about dichromacy rather than contrast.
+ *
+ * Naming: the theme-switchable source values are `--mm-*`, and `@theme inline`
+ * maps them onto Tailwind's `--color-*` / `--shadow-*` / `--radius-*` names. The
+ * indirection is required, not stylistic — `@theme inline { --color-bg:
+ * var(--color-bg) }` would be a self-reference, which CSS treats as invalid at
+ * computed-value time and would collapse every colour in the app.
+ */
+@layer utilities {
+  :root {
+    /*
+     * --- Light: warm cream, not white -------------------------------------
+     *
+     * Four distinct grounds, none of them #ffffff. A white page with white
+     * panels has only a hairline holding it together, which is why that
+     * arrangement always ends up over-bordered — the borders are doing work the
+     * tone should be doing.
+     *
+     * Here the page is the darkest of the light surfaces and panels step *up*
+     * from it, so a card is legible as a card with no outline at all. The
+     * warmth is held to a few percent: enough that the screen is not clinical,
+     * far short of a tinted page.
+     */
+    --mm-bg: #F7F4ED;
+    --mm-bg-elevated: #FBF9F4;
+    --mm-surface: #FDFCF8;
+    --mm-surface-raised: #FFFFFF;
+    --mm-surface-sunken: #E9EEE4;
+    --mm-border: #C7D3C0;
+    --mm-border-strong: #8FA28A;
+    --mm-text: #2A312A;
+    --mm-text-muted: #55604F;
+    --mm-text-subtle: #6E7865;
+
+    /* #C8A96B, darkened until it can be read.
+       The palette gold measures 2.05:1 on this page, so it is unusable as
+       text at any size; this is the same hue at 5.26:1 and still
+       unmistakably gold. An accent legitimately differs per theme in
+       lightness — the contract is the token name and the hue family, not
+       the value. */
+    --mm-accent: #856526;
+    --mm-accent-hover: #6B501C;
+    --mm-accent-soft: #F5EFE0;
+    --mm-accent-contrast: #FFFFFF;
+    --mm-accent-2: #9A7738;
+
+    --mm-danger: #A6394E;
+    --mm-danger-hover: #8A2C3E;
+    --mm-success: #3F7A5E;
+    --mm-warning: #8A6410;
+
+    /* Ambient light: a single warm source, upper left. No second gradient, no
+       accent wash — one light is what makes a room read as a room. */
+    --mm-ambient: 199 211 192;
+    --mm-ambient-strength: 0.6;
+    --mm-grain-opacity: 0.035;
+
+    /*
+     * Data ink. A three-stop ramp for charts only — a series needs a range,
+     * and a range is the one place a gradient carries information rather than
+     * decoration. Never used as a background.
+     */
+    --grad-a: #856526;
+    --grad-b: #9A7738;
+    --grad-c: #8FA28A;
+
+    --mm-shadow-sm: 0 1px 2px 0 rgb(42 49 42 / 0.05);
+    --mm-shadow-md: 0 4px 16px -4px rgb(42 49 42 / 0.10), 0 1px 3px 0 rgb(42 49 42 / 0.05);
+    --mm-shadow-lg: 0 24px 48px -16px rgb(42 49 42 / 0.16), 0 2px 8px -2px rgb(42 49 42 / 0.07);
+    --mm-shadow-glow: 0 0 0 1px rgb(133 101 38 / 0.16), 0 12px 32px -12px rgb(133 101 38 / 0.28);
+
+    --mm-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mm-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    /*
+     * --- Type scale -------------------------------------------------------
+     *
+     * Seven steps, and nothing between them. The old sheet had nineteen sizes,
+     * ten of which were one-off bracket values invented at the call site; that
+     * is the single thing that most reliably makes an interface read as
+     * assembled rather than designed. A closed set means a heading is chosen
+     * from a system instead of nudged until it looks right.
+     *
+     * Ratio is roughly 1.25 through the UI range and opens up at the display
+     * end, where the jump has to be decisive rather than incremental. Nothing
+     * sits below 11px: the old sheet went to 9px, which is not a size, it is an
+     * apology.
+     *
+     * Leading tightens as size grows — long measures need air, headlines do not.
+     */
+    --mm-text-micro: 0.6875rem;  /* 11px — table meta, axis labels, timestamps */
+    --mm-text-tiny: 0.75rem;     /* 12px — labels, captions, helper text */
+    --mm-text-small: 0.8125rem;  /* 13px — dense UI, secondary body */
+    --mm-text-body: 0.875rem;    /* 14px — the default reading size */
+    --mm-text-lead: 1.0625rem;   /* 17px — intros, standfirsts, large numbers */
+    --mm-text-title: 1.5rem;     /* 24px — page and section titles */
+    --mm-text-display: 2.5rem;   /* 40px — one per page, at most */
+
+    --mm-leading-tight: 1.15;
+    --mm-leading-snug: 1.35;
+    --mm-leading-body: 1.55;
+
+    /*
+     * --- Space scale ------------------------------------------------------
+     *
+     * A 4px base, but deliberately gappy at the top: 4 / 8 / 12 / 16 / 24 / 40
+     * / 64 / 96. The gaps matter more than the steps. Evenly spaced options let
+     * every gap be "one more than the last", which is how layouts end up with
+     * no rhythm; a scale that jumps forces a decision between "related" and
+     * "separate" with nothing in between to hedge with.
+     */
+    --mm-space-1: 0.25rem;
+    --mm-space-2: 0.5rem;
+    --mm-space-3: 0.75rem;
+    --mm-space-4: 1rem;
+    --mm-space-6: 1.5rem;
+    --mm-space-10: 2.5rem;
+    --mm-space-16: 4rem;
+    --mm-space-24: 6rem;
+
+    /*
+     * --- Motion -----------------------------------------------------------
+     *
+     * Three durations and one curve. Motion here is for explaining what
+     * changed, never for announcing that something can move.
+     */
+    --mm-duration-fast: 120ms;
+    --mm-duration-base: 220ms;
+    --mm-duration-slow: 420ms;
+
+    /* Tighter radii. Large rounding is a consumer-app signal; 6-10px reads as
+       a tool. */
+    --mm-radius-control: 0.375rem;
+    --mm-radius-card: 0.625rem;
+    --mm-radius-pill: 999px;
+
+    /*
+     * One easing for everything, so the whole product moves the same way.
+     * A long, gentle deceleration with almost no acceleration at the start —
+     * motion that begins abruptly and settles slowly is what reads as weight,
+     * where a symmetric ease-in-out reads as an animation playing.
+     */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /*
+     * --- Seeing the field through the interface -------------------------
+     *
+     * Two numbers, and they are the whole translucency contract.
+     *
+     * `--mm-veil` is how opaque a panel is. `--mm-field` is a hard ceiling on
+     * the galaxy canvas own opacity, and it exists so the legibility case is
+     * *provable* rather than hoped for: the field accumulates additively, so
+     * where thousands of points overlap it clips to white no matter how low
+     * the per-particle alpha is. Capping the canvas is the only thing that
+     * bounds the brightest pixel a panel can ever sit on.
+     *
+     * Light runs a thinner veil and a lower cap than dark, for a reason that
+     * is the opposite of the intuitive one: dark text on a pale panel gets
+     * MORE readable as the backdrop lightens, so translucency is nearly free
+     * here. It is dark mode that is constrained. Measured in
+     * `scripts/verify-field-legibility.mjs`, which fails the build if either
+     * number drifts past what the arithmetic allows.
+     */
+    --mm-veil: 78%;
+    --mm-field: 0.85;
+  }
+
+  .dark {
+    /*
+     * --- Dark: layered depth, no glow -------------------------------------
+     *
+     * The ground is #1A1A1D and the two plums above it are #3B1C32 and
+     * #6A1E55, all three straight from the palette. They sit close together
+     * in luminance, which is what makes elevation read as depth rather than
+     * as stripes, and #121215 gives `surface-sunken` somewhere to go below
+     * the page — the one direction a near-black ground barely has room for.
+     *
+     * Text is a warm off-white rather than #fff. The palette contains no
+     * readable text colour at all, so this is derived; it is tinted toward
+     * the plums rather than neutral, and keeps 14.7:1 on the ground, which
+     * is far more than enough at 14px.
+     *
+     * Deliberately no glow token in general use. Glow used decoratively is the
+     * clearest tell of a generated interface; here light is emitted only by
+     * things that are actually active.
+     */
+    --mm-bg: #1A1A1D;
+    --mm-bg-elevated: #231A25;
+    --mm-surface: #3B1C32;
+    --mm-surface-raised: #6A1E55;
+    --mm-surface-sunken: #121215;
+    --mm-border: #54264A;
+    --mm-border-strong: #83306B;
+    --mm-text: #F2EAEE;
+    --mm-text-muted: #C0A8B6;
+    --mm-text-subtle: #9A8391;
+
+    --mm-accent: #D384A8;
+    --mm-accent-hover: #E09CBB;
+    --mm-accent-soft: #33172B;
+    /* The page ground, not white. White on this rose is 2.75:1 — a button
+       label no one can read. #1A1A1D on it is 6.31:1, and the gradient it
+       starts still measures 4.84:1 at its far end. */
+    --mm-accent-contrast: #1A1A1D;
+    --mm-accent-2: #A64D79;
+
+    /* The palette's rose is 2.78:1 on this ground, so it cannot be text as
+       given; these are the same hue lifted until it can be. */
+    --mm-danger: #EE6A6A;
+    --mm-danger-hover: #F28585;
+    /* Success has no colour in the source palette — this jade was added for it,
+       tuned to the palette's saturation. Warning is a yellower sibling of the
+       accent amber so an advisory does not read as a primary action. */
+    --mm-success: #4FB894;
+    --mm-warning: #F4DA9C;
+
+    /* One plum source, upper left, kept weak. An ambient wash over a
+       near-black ground turns it grey, so what is left reads as a faint
+       cast in one corner rather than as light filling a room. */
+    --mm-ambient: 106 30 85;
+    --mm-ambient-strength: 0.16;
+    --mm-grain-opacity: 0.045;
+
+    /*
+     * Data ink. A three-stop ramp for charts only — a series needs a range,
+     * and a range is the one place a gradient carries information rather than
+     * decoration. Never used as a background.
+     */
+    --grad-a: #D384A8;
+    --grad-b: #A64D79;
+    --grad-c: #6A1E55;
+
+    --mm-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.55);
+    --mm-shadow-md: 0 4px 16px -4px rgb(0 0 0 / 0.7), 0 1px 3px 0 rgb(0 0 0 / 0.55);
+    --mm-shadow-lg: 0 24px 48px -16px rgb(0 0 0 / 0.8), 0 2px 8px -2px rgb(0 0 0 / 0.65);
+    --mm-shadow-glow: 0 0 0 1px rgb(211 132 168 / 0.24), 0 12px 40px -12px rgb(211 132 168 / 0.36);
+
+    /* Dark carries a heavier veil and a higher cap than light. The field is
+       luminous here rather than ink, so it reads strongly on the bare ground
+       (5.2:1) while the panels stay firmly readable over its brightest core. */
+    --mm-veil: 86%;
+    --mm-field: 0.5;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--mm-bg);
+  --color-bg-elevated: var(--mm-bg-elevated);
+  --color-surface: var(--mm-surface);
+  --color-surface-raised: var(--mm-surface-raised);
+  --color-surface-sunken: var(--mm-surface-sunken);
+  --color-border: var(--mm-border);
+  --color-border-strong: var(--mm-border-strong);
+  --color-text: var(--mm-text);
+  --color-text-muted: var(--mm-text-muted);
+  --color-text-subtle: var(--mm-text-subtle);
+  --color-accent: var(--mm-accent);
+  --color-accent-hover: var(--mm-accent-hover);
+  --color-accent-soft: var(--mm-accent-soft);
+  --color-accent-contrast: var(--mm-accent-contrast);
+  --color-accent-2: var(--mm-accent-2);
+  --color-danger: var(--mm-danger);
+  --color-danger-hover: var(--mm-danger-hover);
+  --color-success: var(--mm-success);
+  --color-warning: var(--mm-warning);
+
+  --text-micro: var(--mm-text-micro);
+  --text-tiny: var(--mm-text-tiny);
+  --text-small: var(--mm-text-small);
+  --text-body: var(--mm-text-body);
+  --text-lead: var(--mm-text-lead);
+  --text-title: var(--mm-text-title);
+  --text-display: var(--mm-text-display);
+
+  --spacing-1: var(--mm-space-1);
+  --spacing-2: var(--mm-space-2);
+  --spacing-3: var(--mm-space-3);
+  --spacing-4: var(--mm-space-4);
+  --spacing-6: var(--mm-space-6);
+  --spacing-10: var(--mm-space-10);
+  --spacing-16: var(--mm-space-16);
+  --spacing-24: var(--mm-space-24);
+
+  --radius-control: var(--mm-radius-control);
+  --radius-card: var(--mm-radius-card);
+  --radius-pill: var(--mm-radius-pill);
+
+  --shadow-sm: var(--mm-shadow-sm);
+  --shadow-md: var(--mm-shadow-md);
+  --shadow-lg: var(--mm-shadow-lg);
+  --shadow-glow: var(--mm-shadow-glow);
+
+  --font-sans: var(--mm-font-sans);
+  --font-mono: var(--mm-font-mono);
+}
+
+html {
+  /* Kept in sync by the theme store so native controls and scrollbars match. */
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /*
+   * 13px base, not 16.
+   *
+   * This is the single most defining choice in a dense product interface. At 16px
+   * a screen holds a handful of rows and everything needs generous padding to
+   * breathe; at 13px the same screen holds a working amount of information and
+   * the padding can tighten to match. Body *prose* is still set larger where it
+   * appears — this is the UI scale, not the reading scale.
+   */
+  /* 14px, up from 13. Thirteen is a dense-tool size, and it was being used as
+     a *ceiling* here — five further sizes sat below it, down to 9px. Raising
+     the floor is what let the scale keep a readable bottom step. */
+  font-size: var(--mm-text-body);
+  line-height: var(--mm-leading-body);
+  letter-spacing: -0.006em;
+}
+
+/* Theme flips animate the ground, not every element — a global transition
+   causes a visible sweep and janks on low-end devices. */
+body {
+  transition:
+    background-color 320ms var(--ease-out),
+    color 320ms var(--ease-out);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+/* --- Reusable presentation utilities ------------------------------------- */
+
+/* Display text with the accent gradient. Used once or twice per page at most. */
+.text-gradient {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-text) 0%,
+    var(--color-text) 38%,
+    var(--grad-a) 76%,
+    var(--grad-b) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Accent-only gradient text, for the emphasised half of a display heading. */
+.text-gradient-accent {
+  background-image: linear-gradient(100deg, var(--grad-a) 0%, var(--grad-b) 62%, var(--grad-a) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/*
+ * Panels.
+ *
+ * **Translucent in both themes, blurred in neither.** Three decisions here, and
+ * the reasoning for each is the opposite of what it was before:
+ *
+ *  1. *Translucent in light mode too.* The old note said translucency needs
+ *     darkness behind it to read as glass, which is true of *glass* and false of
+ *     what this is. The galaxy behind a light panel is ink rather than light, so
+ *     a thin veil reads as paper laid over a print — and the legibility maths
+ *     runs the friendly way here: dark text on a pale panel gains contrast as
+ *     the backdrop lightens. Light mode is the easy case, not the impossible one.
+ *
+ *  2. *No `backdrop-filter`.* Dark panels used to carry `blur(10px)`. The
+ *     Dashboard renders fifteen `.panel` surfaces at once, so that was fifteen
+ *     regions the compositor re-blurred on every single frame the galaxy moved —
+ *     the file's own comment warned about exactly this and the code did it
+ *     anyway. Plain alpha costs nothing and, at a 14-24% show-through, the field
+ *     behind a panel is a wash rather than a set of point lights, so there is
+ *     nothing that needs softening.
+ *
+ *  3. *`border-strong`, not `border`.* A hairline over a *fixed* ground can be
+ *     one step off it. Over a variable one it cannot: as the galaxy's core
+ *     brightens a dark panel, the panel's luminance sweeps through the ordinary
+ *     border's own, and at the crossing point the edge disappears completely
+ *     (measured at 1.00:1). The firmer token stays clear of that crossing.
+ */
+.panel {
+  position: relative;
+  background-color: color-mix(in srgb, var(--color-surface) var(--mm-veil), transparent);
+  border: 1px solid var(--color-border-strong);
+}
+
+/* The one emphasised panel per screen. A step up in tone, and it keeps the veil
+   rather than opting out of it — `bg-surface-raised` used to be applied as a
+   Tailwind utility here, which beat `.panel`'s own background and left the card
+   fully opaque while still paying for the blur it could no longer show. */
+.panel-raised {
+  background-color: color-mix(in srgb, var(--color-surface-raised) var(--mm-veil), transparent);
+}
+
+/* Reserved for the few elements that genuinely float over the render — the nav
+   bar and the live-interview console. Blur is expensive; this is the exception,
+   not the default. */
+.floating {
+  position: relative;
+  background-color: color-mix(in srgb, var(--color-bg-elevated) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 90%, transparent);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(20px) saturate(150%);
+}
+
+
+
+/*
+ * --- Route transitions ---------------------------------------------------
+ *
+ * The cross-fade is done by the browser, not by React.
+ *
+ * The obvious approach — wrapping `<Routes>` in `AnimatePresence mode="wait"` —
+ * was tried here and caused a real failure: the incoming route is withheld until
+ * every exiting descendant reports completion, `PageTransition` sits below the
+ * route element and registers with that presence context, and when the handshake
+ * did not resolve the shell kept rendering around an empty main area. The note
+ * in `App.tsx` is the record of that.
+ *
+ * The View Transitions API has no handshake to lose. The browser snapshots the
+ * old frame, React swaps the DOM, and the two are cross-faded by the compositor.
+ * If the API is missing the navigation is simply instant — the failure mode is
+ * "no animation", never "no page".
+ *
+ * Durations are asymmetric on purpose: the old view leaves faster than the new
+ * one arrives, so the incoming page feels like it is being revealed rather than
+ * the outgoing one merely being erased.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) {
+    animation: vt-out 140ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  ::view-transition-new(root) {
+    animation: vt-in 300ms var(--ease-out) both;
+  }
+}
+
+/* Reduced motion gets no animation at all rather than a shortened one: the
+   request is for less movement, and a fast fade is still movement. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+@keyframes vt-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    /* A very short rise. Enough to give the change a direction, small enough
+       that it never reads as the page sliding in from somewhere. */
+    transform: translateY(6px);
+  }
+}
+
+/*
+ * --- The room ------------------------------------------------------------
+ *
+ * What replaced the particle field.
+ *
+ * Two layers, both cheap, neither animated, neither competing with content:
+ *
+ *   1. `.ambient` — one soft directional light, upper left. A single source,
+ *      because that is what makes a surface read as physically lit; two or
+ *      more sources cancel into an even wash, which is the look of a gradient
+ *      applied to a page rather than light falling across one.
+ *
+ *   2. `.grain` — a fine static noise, a few percent. This is the layer doing
+ *      most of the work. Flat digital colour is what reads as cheap; a
+ *      film-grain tooth gives large empty areas something to be, so negative
+ *      space becomes deliberate instead of unfilled. Static, not animated —
+ *      moving grain is a screensaver.
+ *
+ * The SVG is inline as a data URI so it costs no request and cannot fail to
+ * load. `feTurbulence` is rasterised once by the compositor and then reused,
+ * so the paint cost does not repeat on scroll.
+ */
+.ambient {
+  background: radial-gradient(
+    120% 90% at 12% -10%,
+    rgb(var(--mm-ambient) / var(--mm-ambient-strength)),
+    transparent 70%
+  );
+}
+
+.grain {
+  opacity: var(--mm-grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+
+/*
+ * --- The void ------------------------------------------------------------
+ *
+ * The black ground for the pages that carry the galaxy at full strength.
+ *
+ * The field needs darkness to read against — additive blending has nothing to
+ * add to on a pale surface, and on the warm-stone light theme the whole thing
+ * simply disappears. So the landing and sign-in pages get their own dark
+ * environment in *both* themes, rather than the galaxy being hidden from half
+ * the audience or the light theme being dragged toward black to accommodate a
+ * backdrop.
+ *
+ * This is a deliberate art-directed exception, not a theme override: it applies
+ * only where `.void` is set, and everything inside the product keeps `Room`.
+ * A dark entrance opening into a light workspace is a normal editorial move —
+ * the cover stock differs from the paper.
+ *
+ * Pure #000, matching the dark theme. The old note here argued against it —
+ * that a cool rim at low alpha would have nowhere to fall off to and would
+ * end on a visible edge. That was a real concern about a real problem, and
+ * the single-family ramp removed it: the rim is now a deep plum whose own luminance
+ * is low, so it fades toward black over a long way instead of arriving there.
+ */
+.void {
+  --mm-text: #F6F0F3;
+  --mm-text-muted: #C0A8B6;
+  --mm-text-subtle: #9A8391;
+  --mm-border: #2E1B29;
+  --mm-border-strong: #4A2340;
+  --mm-surface: #221520;
+  --mm-surface-raised: #2E1B29;
+  --mm-bg-elevated: #1A1015;
+  /* NOT painted on this element.
+
+     The galaxy canvas is a `position: fixed; z-index: -10` child, and this
+     element is `position: relative` with `z-index: auto` -- which does not
+     create a stacking context. So the canvas joins the ROOT stacking context
+     at level -10 and paints in step 2, while this element, being positioned,
+     paints its own background in step 6. A `background-color` here therefore
+     covered the field completely: the galaxy was rendering correctly and
+     being painted over, on every page that used it, which is why it was never
+     visible anywhere.
+
+     The ground goes on a pseudo-element pinned BELOW the canvas instead. Two
+     negative levels order deterministically -- -20 paints before -10 -- so
+     void ground, then galaxy, then scrim, then content, regardless of what
+     the host page wraps this in. */
+  color: var(--mm-text);
+}
+
+.void::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -20;
+  background-color: #14101a;
+  pointer-events: none;
+}
+
+/*
+ * The galaxy is brightest at the centre, which is exactly where a hero's words
+ * sit, so the middle gets lifted back out and type never depends on where the
+ * arms happen to be.
+ *
+ * Softened from 0.82 to 0.66 at the centre, and pulled in from 62% to 54%.
+ * The old numbers were set while `.void` was painting its ground on top of the
+ * canvas -- so the field was invisible regardless and the scrim cost nothing
+ * to over-tune. With the field actually rendering, that 82% centre was the
+ * main thing standing between the reader and the hub. At 0.66 the hero text
+ * (#f2ece9) still measures 5.8:1 against the worst case of a clipped white
+ * core directly behind it, which is comfortably past AA.
+ */
+.void-scrim {
+  background: radial-gradient(
+    54% 42% at 50% 42%,
+    rgb(20 16 26 / 0.66) 0%,
+    rgb(20 16 26 / 0.32) 55%,
+    transparent 100%
+  );
+}
+
+/*
+ * --- Gradients, on purpose -----------------------------------------------
+ *
+ * The brief banned gradients and it was right about the ones it meant: a
+ * gradient sprayed across a page or repeated on every card is the surest sign
+ * that nobody made a decision. These are the opposite case -- a gradient on the
+ * single highest-value control on a screen, where the whole point is that one
+ * element is lit differently from everything around it.
+ *
+ * So the rule is scarcity rather than abstinence, and it is enforced by what
+ * these are named: an *action* gradient and a *display* gradient, not a
+ * background one. Two stops, close together, along the palette's own
+ * accent-to-rose axis -- a long ramp between distant hues is the thing that
+ * reads as decoration.
+ */
+.grad-action {
+  background-image: linear-gradient(
+    135deg,
+    var(--color-accent) 0%,
+    color-mix(in srgb, var(--color-accent) 58%, var(--color-accent-2)) 100%
+  );
+  transition:
+    filter var(--mm-duration-base) var(--ease-out),
+    box-shadow var(--mm-duration-base) var(--ease-out);
+}
+
+/*
+ * Hover brightens the ramp rather than swapping it.
+ *
+ * `background-image` is not an interpolable property -- a second gradient on
+ * `:hover` would snap instantly while every other control on the screen eases
+ * over 300ms, and one element moving to a different clock is exactly the kind
+ * of inconsistency that reads as unfinished. `filter` does interpolate, so the
+ * lit state can share the transition the rest of the button already has.
+ *
+ * Brightness alone would wash the ramp toward grey at the top end; the small
+ * saturate keeps the accent's hue intact as it lifts.
+ */
+.grad-action:hover:not(:disabled) {
+  filter: brightness(1.08) saturate(1.06);
+}
+
+.grad-action:active:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+/*
+ * A thin gradient stroke, for the 2px markers that indicate the active tab or
+ * row. At this size a gradient is legible as a change in temperature along the
+ * stroke and nothing more, which is the one place it can be used freely.
+ */
+.grad-stroke {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-accent) 0%,
+    var(--color-accent-2) 100%
+  );
+}
+
+/*
+ * A hairline that carries structure without drawing a box.
+ *
+ * The editorial move that replaced most of this interface's borders: a rule
+ * separates two things while a border encloses one, and an interface built from
+ * enclosures is the "rectangle inside a rectangle" problem. Fades at both ends
+ * so it reads as a division rather than an edge.
+ */
+.hairline {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-border) 12%,
+    var(--color-border) 88%,
+    transparent
+  );
+}
+
+/* Display type. Tighter tracking and shorter leading than the body scale —
+   headline metrics and paragraph metrics should not be the same metrics. */
+.display {
+  letter-spacing: -0.028em;
+  line-height: 1.05;
+  font-weight: 600;
+}
+
+/* Section label. Small caps with restrained tracking — the wide 0.22em version
+   was doing a "premium" impression rather than labelling anything. */
+.marker {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  font-size: 0.6875rem;
+}
+
+/*
+ * A data row.
+ *
+ * Dense products are built from rows, not cards. One hairline separator, a tight
+ * vertical rhythm, and a hover that changes the background rather than lifting
+ * the element — lifting implies the row is a physical object, which stops being
+ * true once there are twenty of them.
+ */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-control);
+  transition: background-color 120ms var(--ease-out);
+}
+
+.row:hover {
+  background-color: var(--color-surface-raised);
+}
+
+/* Numeric emphasis for a figure that leads a stat. */
+.stat {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* A hairline gradient rule, for section breaks that shouldn't read as borders. */
+.rule-fade {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-border), transparent);
+}
+
+/* A gentler wash than `key-wash`, for panels that need their own light. */
+.aura {
+  background: radial-gradient(
+    40rem 26rem at 50% -12%,
+    color-mix(in srgb, var(--grad-a) 12%, transparent),
+    transparent 70%
+  );
+}
+
+/* Slow sheen across a surface — used on skeleton loaders. */
+@keyframes sheen {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-sheen {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-text) 9%, transparent),
+    transparent
+  );
+  animation: sheen 1.8s var(--ease-out) infinite;
+}
+
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-float {
+  animation: float-y 6s ease-in-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 38%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 18px color-mix(in srgb, var(--color-accent) 0%, transparent);
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 2.4s var(--ease-out) infinite;
+}
+
+/* Numeric readouts (timers, scores) must not reflow as digits change. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section 5.5 / 17: every animation falls back to a plain opacity crossfade
+   (or no motion at all for layout-affecting transitions) when the user has
+   asked the OS for reduced motion. Functional loading spinners are exempt
+   since they communicate real waiting state. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Keyboard focus is always visible (Section 17) — never suppressed, only restyled. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background-color: color-mix(in srgb, var(--color-accent) 26%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

@@ -1,0 +1,50 @@
+# Netlify configuration for the MockMateAI frontend.
+#
+# `base` is this directory, so Netlify runs npm here rather than at the repo
+# root. The build is ~52 MB: `npm run build` first fetches Pyodide (13 MB) and
+# the MediaPipe models (34 MB) via the setup scripts, because both are
+# gitignored -- they are vendored runtimes, not source.
+
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # Vite bakes VITE_* in at build time, so this is set in the Netlify UI
+  # (Site settings -> Environment variables) and a change to it needs a
+  # redeploy, not just a restart. It must be the Render URL *including*
+  # /api/v1 -- the WebSocket URL is derived from it, so a wrong value breaks
+  # the live interview as well as every request.
+  #   VITE_API_BASE_URL = https://mockmateai-api.onrender.com/api/v1
+
+# Single-page app: every path is served index.html so a deep link or a reload
+# reaches React Router instead of a 404 from the CDN.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Pyodide and MediaPipe ship content-hashed runtimes that never change under
+# the same name, so they are cached hard. Everything else is left to Netlify's
+# default so a deploy is visible immediately.
+[[headers]]
+  for = "/pyodide/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/mediapipe/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    # The microphone and camera are the product; denying them here would
+    # disable the interview entirely.
+    Permissions-Policy = "microphone=(self), camera=(self), geolocation=()"

@@ -1,0 +1,51 @@
+# MockMateAI backend — Phase 1 (Foundation) dependencies.
+# Pinned to major/minor versions; run `pip install -r requirements.txt`.
+
+fastapi==0.141.1
+# Pinned explicitly even though fastapi pulls it in: every starlette
+# below 1.3.1 carries known advisories, so the floor must not be left to
+# whatever a future fastapi release happens to resolve.
+starlette==1.3.1
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+email-validator==2.2.0
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg[binary]==3.2.3
+
+# Cache / rate-limit backing store
+redis==5.2.1
+slowapi==0.1.9
+limits==3.14.1
+
+# Auth / security
+argon2-cffi==23.1.0
+pyjwt[crypto]==2.13.0
+cryptography==50.0.0
+
+# Outbound HTTP (Google OAuth token exchange + JWKS fetch)
+httpx==0.28.1
+
+# PDF feedback report export (Section 7.4's GET /feedback/:sessionId/pdf).
+# Pure Python, no system libraries — deliberately chosen over wkhtmltopdf or a
+# headless browser so the export works in the same container as the API.
+reportlab==4.2.5
+
+# --- LLM providers (OPTIONAL) ---
+# Only needed when you actually configure that provider in
+# MOCKMATEAI_LLM_PROVIDER_ORDER. The default order is `mock`, which is a real
+# deterministic adapter requiring no SDK and no API key, so a fresh install
+# runs interviews without either of these. Both adapters lazy-import their SDK
+# and raise a clear "not installed" error rather than breaking app startup, so
+# you can safely leave these commented out until you have a key.
+# anthropic==0.69.0
+# The OpenAI client is also the client for every OpenAI-PROTOCOL host --
+# Groq, OpenRouter, Cerebras, Together, a local Ollama -- selected with
+# MOCKMATEAI_OPENAI_BASE_URL, or inferred from a gsk_ key. So installing it
+# is what unlocks the free providers, not just OpenAI itself.
+openai==3.19.2
+
+python-dotenv==1.0.1

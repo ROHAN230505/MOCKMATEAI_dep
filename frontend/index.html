@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- The official mark, with the hand-drawn SVG kept as the fallback for any
+         browser that can't take a PNG icon. -->
+    <link rel="icon" type="image/png" href="/brand/mockmateai-mark.png" />
+    <link rel="alternate icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/brand/mockmateai-mark.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="MockMateAI — practice like it's real. Walk in ready." />
+    <!-- Painted before first paint so the browser chrome matches the theme
+         rather than flashing white behind a dark page on load. -->
+    <meta name="theme-color" content="#1A1A1D" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#F7F4ED" media="(prefers-color-scheme: light)" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <title>MockMateAI</title>
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="MockMateAI" />
+    <meta property="og:title" content="MockMateAI — practice like it’s real" />
+    <meta property="og:description" content="MockMateAI runs realistic mock interviews with an AI interviewer, then scores what it actually measured." />
+    <meta property="og:image" content="/brand/mockmateai-mark.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="MockMateAI — practice like it’s real" />
+    <meta name="twitter:description" content="MockMateAI runs realistic mock interviews with an AI interviewer, then scores what it actually measured." />
+
+    <!-- Applies the stored theme before the first paint. Inline and
+         synchronous on purpose: deferring this to React would show a
+         light-mode flash on every dark-mode reload. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("mockmateai.theme");
+          // Dark unless explicitly chosen otherwise, matching themeStore's
+          // default. Only "system" defers to the OS.
+          var dark =
+            stored !== "light" &&
+            (stored !== "system" || window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {
+          /* Private mode blocks localStorage — fall through to the light default. */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
