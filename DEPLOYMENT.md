@@ -31,11 +31,13 @@ committed and pushed. Check `git status` first: anything under
 
 ## 2. JWT keys
 
-The ones in `backend/dev_keys/` are for development. Generate a fresh pair:
+The ones in `backend/dev_keys/` are for development. Generate a fresh pair
+**outside the repository** -- without a directory argument the script writes to
+`dev_keys/` and, since those already exist, does nothing:
 
 ```bash
 cd backend
-./.venv/Scripts/python.exe scripts/generate_dev_keys.py
+./.venv/Scripts/python.exe scripts/generate_dev_keys.py ~/mockmateai-prod-keys
 ```
 
 You will paste the **contents** of each `.pem` into Render, not the paths —
