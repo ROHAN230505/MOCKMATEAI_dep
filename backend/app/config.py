@@ -135,6 +135,17 @@ class Settings(BaseSettings):
     # this flag so local dev/tests never depend on outbound network access.
     enable_breached_password_check: bool = False
 
+    @field_validator("db_url")
+    @classmethod
+    def _psycopg_driver(cls, v: str) -> str:
+        # Hosted Postgres (Render, Neon, Heroku) hands out `postgresql://` or
+        # `postgres://`, which SQLAlchemy resolves to psycopg2 -- not installed.
+        # Naming the driver here means the URL can be pasted as given.
+        for scheme in ("postgresql://", "postgres://"):
+            if v.startswith(scheme):
+                return "postgresql+psycopg://" + v[len(scheme):]
+        return v
+
     @field_validator("cors_allowed_origins")
     @classmethod
     def _non_empty_origins(cls, v: str) -> str:

@@ -1,47 +1,35 @@
 # Deploying MockMateAI for free
 
-Four services. Netlify alone cannot host this: the backend is a long-running
-Python process that holds WebSocket connections, which a static host has no
-way to run.
+Everything runs on Render, created in one go from `render.yaml`:
 
-| Piece | Host | Free tier |
+| Piece | Render service | Free tier |
 |---|---|---|
-| Frontend | Netlify | Yes, no card |
-| Backend (FastAPI) | Render | Yes, sleeps when idle — see the warning below |
-| PostgreSQL | Neon | Yes, no expiry |
-| Redis | Upstash | Yes, no card |
+| Frontend | Static Site `mockmateai` | Yes, never sleeps |
+| Backend (FastAPI) | Web Service `mockmateai-api` | Yes, sleeps when idle — see below |
+| PostgreSQL | Postgres `mockmateai-db` | Yes, **but expires** — see below |
+| Redis | Key Value `mockmateai-redis` | Yes, not persisted |
 
-**Read this first.** Render's free tier stops the container after 15 minutes
-with no traffic, and the next request waits roughly **50 seconds** for it to
-start again. Someone opening your link cold sees a spinner for a minute and
-concludes the site is broken. If people will be judging this, either warm it up
-a few minutes beforehand, point a free uptime pinger at `/health` every 10
-minutes, or run it locally instead — localhost has no cold start and the
-browser trusts it with the microphone more readily than a brand-new domain.
+**Read this first.**
+
+- **Cold start.** The free API stops after 15 minutes with no traffic, and the
+  next request waits roughly **50 seconds**. The frontend still loads at once,
+  but sign-in spins until the API is up. Before a demo, open the site a few
+  minutes early, or point a free uptime pinger at `/health` every 10 minutes.
+- **The free database expires** (Render's pricing page has the current
+  window) and its data goes with it. For a project that must outlive that, use
+  Neon instead — see *Alternatives* at the end.
+- **Free Redis is not persisted.** A restart drops interviews in progress;
+  accounts and reports live in Postgres and are unaffected.
 
 ---
 
-## 1. Database — Neon
+## 1. Push the code to GitHub
 
-1. Sign up at neon.tech, create a project.
-2. Copy the connection string.
-3. **Change the scheme.** Neon gives you `postgresql://...`; SQLAlchemy needs
-   the driver named:
+Render deploys from a GitHub repo, so everything you want live must be
+committed and pushed. Check `git status` first: anything under
+`frontend/public/` is served publicly to anyone with the link.
 
-   ```
-   postgresql+psycopg://user:password@host/dbname?sslmode=require
-   ```
-
-   Keep `?sslmode=require`. Without it the connection is refused.
-
-## 2. Redis — Upstash
-
-1. Sign up at upstash.com, create a Redis database.
-2. Copy the **`redis://` TCP URL**, not the REST endpoint. The REST URL looks
-   plausible and will not work — rate limiting and live session state both
-   speak the Redis protocol.
-
-## 3. JWT keys
+## 2. JWT keys
 
 The ones in `backend/dev_keys/` are for development. Generate a fresh pair:
 
@@ -55,62 +43,54 @@ there is no `dev_keys/` directory on the server, because keys are secrets and
 are not in git. If Render's form flattens the newlines, that is handled; the
 loader repairs a collapsed PEM rather than failing with a DER parse error.
 
-## 4. Backend — Render
+## 3. Create everything — Render Blueprint
 
-1. Push this repository to GitHub.
-2. On Render: **New → Blueprint**, point it at the repo. It reads `render.yaml`.
-3. Set these in the dashboard (all marked `sync: false`, so Render will ask):
+1. Sign up at render.com with GitHub and allow it access to the repo.
+2. **New → Blueprint**, pick the repo. Render reads `render.yaml` and lists
+   the four services.
+3. It asks for the `sync: false` values. Fill in:
 
    | Variable | Value |
    |---|---|
-   | `MOCKMATEAI_DB_URL` | the Neon URL, scheme corrected |
-   | `MOCKMATEAI_REDIS_URL` | the Upstash `redis://` URL |
    | `MOCKMATEAI_JWT_PRIVATE_KEY` | contents of `jwt_private.pem` |
    | `MOCKMATEAI_JWT_PUBLIC_KEY` | contents of `jwt_public.pem` |
    | `MOCKMATEAI_LLM_API_KEY` | your Groq key (`gsk_...`) |
-   | `MOCKMATEAI_CORS_ALLOWED_ORIGINS` | your Netlify URL — **step 5** |
-   | `MOCKMATEAI_FRONTEND_URL` | the same Netlify URL |
+   | `MOCKMATEAI_CORS_ALLOWED_ORIGINS` | `https://mockmateai.onrender.com` (guess — corrected in step 4) |
+   | `MOCKMATEAI_FRONTEND_URL` | the same |
+   | `VITE_API_BASE_URL` | `https://mockmateai-api.onrender.com/api/v1` (guess — corrected in step 4) |
 
-   `MOCKMATEAI_REFRESH_TOKEN_SECRET` is generated for you.
+   Leave the three Google variables empty unless you do step 5.
+   The database URL, Redis URL and refresh-token secret are filled in for you.
 
-4. Deploy. Migrations run on start, so the 52 DSA problems and 50 aptitude
-   questions seed themselves.
-5. Check `https://your-api.onrender.com/health` returns
-   `{"success":true,...}`.
+4. **Apply.** The first deploy takes several minutes: the frontend build
+   fetches Pyodide and the MediaPipe models (~50 MB), and the API runs
+   migrations on start, which seed the DSA problems and aptitude questions.
 
-**Chicken and egg:** CORS needs the Netlify URL, which does not exist yet.
-Deploy the backend with a placeholder, do step 5, then come back and correct
-these two values. The backend restarts in seconds.
+## 4. Check the real URLs
 
-## 5. Frontend — Netlify
+Render only gives a service its plain name if nobody else has taken it;
+otherwise it adds a suffix (`mockmateai-api-x1y2.onrender.com`). Open each
+service in the dashboard and read its actual URL.
 
-1. **Add new site → Import an existing project**, pick the same repo.
-2. Netlify reads `frontend/netlify.toml`, so the base directory, build command
-   and publish directory are already set. Do not override them.
-3. Add one environment variable — **Site settings → Environment variables**:
+1. Open `https://<api-url>/health` — it should return `{"success":true,...}`.
+2. If the URLs differ from the guesses in step 3:
+   - **API service → Environment**: set `MOCKMATEAI_CORS_ALLOWED_ORIGINS` and
+     `MOCKMATEAI_FRONTEND_URL` to the frontend URL. No trailing slash.
+   - **Static site → Environment**: set `VITE_API_BASE_URL` to
+     `https://<api-url>/api/v1`, **including** `/api/v1`, then
+     **Manual Deploy → Clear build cache & deploy**. Vite bakes this in at
+     build time, so saving the variable alone changes nothing.
+3. Open the frontend URL, sign up, and run one short interview.
 
-   ```
-   VITE_API_BASE_URL = https://your-api.onrender.com/api/v1
-   ```
-
-   Include `/api/v1`. The WebSocket URL for the live interview is derived from
-   this, so a wrong value breaks the interview as well as every request.
-
-   Vite bakes `VITE_*` in **at build time**. Changing it later needs a
-   redeploy, not a restart.
-
-4. Deploy, then go back to Render and set `MOCKMATEAI_CORS_ALLOWED_ORIGINS`
-   and `MOCKMATEAI_FRONTEND_URL` to your Netlify URL (no trailing slash).
-
-## 6. Google sign-in (optional)
+## 5. Google sign-in (optional)
 
 Email and password work without this. To keep the Google button working:
 
 1. Google Cloud Console → Credentials → your OAuth client.
-2. **Authorised JavaScript origins**: add `https://your-site.netlify.app`
+2. **Authorised JavaScript origins**: add the frontend URL.
 3. **Authorised redirect URIs**: add
-   `https://your-api.onrender.com/api/v1/auth/google/callback`
-4. On Render set `MOCKMATEAI_GOOGLE_CLIENT_ID`,
+   `https://<api-url>/api/v1/auth/google/callback`
+4. On the API service set `MOCKMATEAI_GOOGLE_CLIENT_ID`,
    `MOCKMATEAI_GOOGLE_CLIENT_SECRET`, and `MOCKMATEAI_OAUTH_REDIRECT_URI` to
    that same callback URL.
 
@@ -123,17 +103,30 @@ The redirect URI must match **character for character**. A mismatch gives
 
 | Symptom | Cause |
 |---|---|
-| First load takes ~50s | Render free tier waking up. Expected. |
-| Console says CORS blocked | `MOCKMATEAI_CORS_ALLOWED_ORIGINS` does not exactly match the Netlify origin. No trailing slash. |
+| Sign-in spins for ~50s | API waking up. Expected on the free tier. |
+| Console says CORS blocked | `MOCKMATEAI_CORS_ALLOWED_ORIGINS` does not exactly match the frontend origin. No trailing slash. |
 | Every API call 404s | `VITE_API_BASE_URL` is missing `/api/v1`. |
-| Interview connects then drops | Backend asleep or restarting; the client falls back to HTTP polling and keeps working. |
+| Changed `VITE_API_BASE_URL`, nothing happened | It is baked in at build time — redeploy the static site. |
+| Interview connects then drops | API asleep or restarting; the client falls back to HTTP polling and keeps working. |
 | Login works, refresh logs you out | `MOCKMATEAI_REFRESH_TOKEN_SECRET` changed between deploys. |
-| Backend will not start | Usually the DB URL scheme: it must be `postgresql+psycopg://`. |
-| Microphone does nothing | HTTPS is required for speech recognition. Netlify and Render are both HTTPS, so check the browser's site permissions. |
-| DSA list is empty | Migrations did not run — check the Render deploy log for `alembic upgrade head`. |
+| Microphone does nothing | Voice needs Chrome or Edge, and the site's microphone permission allowed. |
+| DSA list is empty | Migrations did not run — check the API deploy log for `alembic upgrade head`. |
+| Everything worked, then the data vanished | The free database expired. |
+
+## Alternatives
+
+- **Postgres on Neon (no expiry).** Delete the `databases:` block from
+  `render.yaml`, replace the `fromDatabase` entry with `sync: false`, and paste
+  Neon's connection string as `MOCKMATEAI_DB_URL`. Keep `?sslmode=require`;
+  the `postgresql://` scheme is fine as given (`config.py` adds the driver).
+- **Frontend on Netlify or Vercel.** `frontend/netlify.toml` and
+  `frontend/vercel.json` carry the same rewrite and headers. Set the base /
+  root directory to `frontend` and `VITE_API_BASE_URL` as above, then delete
+  the static site from `render.yaml` so there are not two copies.
+- **The API cannot go on Vercel or Netlify**: their functions are
+  request/response only and cannot hold the interview's WebSocket open.
 
 ## What this costs
 
-Nothing. The limits that actually bite first are Render's sleep, Neon's storage
-cap, and your Groq rate limit — none of which charge you, they just stop
-serving until the window resets.
+Nothing. The limits that bite first are the API's sleep, the database expiry,
+and your Groq rate limit — none of which charge you.

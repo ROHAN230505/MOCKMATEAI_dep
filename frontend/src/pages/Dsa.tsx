@@ -18,7 +18,11 @@ import {
   requestDsaHint,
   submitDsaSolution,
 } from "../services/practiceApi";
-import type { Difficulty, DsaHint } from "../types/practice";
+import type {
+  Difficulty,
+  DsaHint,
+  DsaProblemListItem,
+} from "../types/practice";
 
 /**
  * DSA practice (Phase 7).
@@ -101,7 +105,41 @@ export function Dsa() {
   }
 
   if (openId) {
-    return <ProblemWorkspace problemId={openId} onBack={() => setOpenId(null)} />;
+    /*
+     * What to offer after a solve.
+     *
+     * The next UNSOLVED problem rather than the next one in the list, because
+     * the list is ordered by title and a candidate working through it has
+     * usually already done the ones above. Wrapping to the start means
+     * finishing problem 50 still offers problem 3 if 3 is outstanding.
+     *
+     * Computed here rather than in the workspace: this is where the list
+     * lives, and the workspace knowing about its neighbours would make it
+     * depend on a query it does not otherwise need.
+     */
+    const ordered = problems.data;
+    const current = ordered.findIndex((p) => p.id === openId);
+    const rotated = current < 0 ? ordered : [...ordered.slice(current + 1), ...ordered.slice(0, current)];
+    const next = rotated.find((p) => !p.solved) ?? null;
+
+    return (
+      <ProblemWorkspace
+        /*
+         * Keyed, so moving to the next problem REMOUNTS rather than re-renders.
+         *
+         * Without this the component keeps its state across the change: the
+         * previous problem's code (the seeder deliberately will not overwrite
+         * typed code), its "all tests passed" panel, and its hints would all
+         * appear under the new problem's statement. The result reads as the
+         * new problem already being solved.
+         */
+        key={openId}
+        problemId={openId}
+        onBack={() => setOpenId(null)}
+        nextProblem={next}
+        onNext={next ? () => setOpenId(next.id) : undefined}
+      />
+    );
   }
 
   const solved = problems.data.filter((p) => p.solved).length;
@@ -156,7 +194,18 @@ export function Dsa() {
   );
 }
 
-function ProblemWorkspace({ problemId, onBack }: { problemId: string; onBack: () => void }) {
+function ProblemWorkspace({
+  problemId,
+  onBack,
+  nextProblem,
+  onNext,
+}: {
+  problemId: string;
+  onBack: () => void;
+  /** The next unsolved problem, or null when every other one is done. */
+  nextProblem?: DsaProblemListItem | null;
+  onNext?: () => void;
+}) {
   const queryClient = useQueryClient();
   const runner = useDsaRunner();
 
@@ -257,6 +306,21 @@ function ProblemWorkspace({ problemId, onBack }: { problemId: string; onBack: ()
           {problem.data.solved && <Badge tone="success">Solved</Badge>}
           <Badge tone={DIFFICULTY_TONE[problem.data.difficulty]}>{problem.data.difficulty}</Badge>
           <Badge>{TOPIC_LABELS[problem.data.topic] ?? problem.data.topic}</Badge>
+          {/*
+            Always here, and that is the point.
+            
+            This started life inside the results panel, shown only once every
+            hidden test passed. That is the wrong condition twice over: a
+            submission that fails one hidden case offers no way forward at all,
+            and a candidate who simply wants to move on has to solve the
+            problem first to be allowed to. Moving on is navigation, not a
+            reward, so it sits in the navigation bar and is never disabled.
+          */}
+          {onNext && nextProblem && (
+            <Button variant="secondary" size="sm" onClick={onNext} title={nextProblem.title}>
+              Next problem →
+            </Button>
+          )}
         </span>
       </div>
 
@@ -394,6 +458,45 @@ function ProblemWorkspace({ problemId, onBack }: { problemId: string; onBack: ()
                   {summary.runtimeMs}ms across {summary.totalCount} case
                   {summary.totalCount === 1 ? "" : "s"}
                 </p>
+              )}
+
+              {/*
+                Where to go after solving it.
+                
+                Until now a passed submission ended in a result panel and
+                nothing else: the only way onward was a small "Back to the
+                list" link at the top of the page, and then finding the next
+                problem by hand. Someone practising solves several in a row,
+                so the moment they succeed is exactly when the next one should
+                be one click away.
+                
+                Only on a real submission — passing the visible examples is not
+                solving the problem, and offering to move on there would teach
+                people to stop before the hidden tests.
+              */}
+              {ranHidden && (
+                <div className="flex flex-col gap-3 border-t border-border pt-4">
+                  <p className="text-sm text-text-muted">
+                    {summary.allPassed
+                      ? nextProblem
+                        ? "Solved. Ready for another?"
+                        : "Solved — and that was the last unsolved problem. Nice work."
+                      : "Not passing yet. Keep going, or come back to it later."}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {nextProblem && onNext && (
+                      <Button variant={summary.allPassed ? "primary" : "secondary"} onClick={onNext}>
+                        {summary.allPassed ? "Next" : "Try another"}: {nextProblem.title}
+                      </Button>
+                    )}
+                    <Button
+                      variant={nextProblem && summary.allPassed ? "secondary" : "primary"}
+                      onClick={onBack}
+                    >
+                      Back to the list
+                    </Button>
+                  </div>
+                </div>
               )}
             </Card>
           )}

@@ -1,11 +1,12 @@
-# Render blueprint for the MockMateAI backend.
+# Render blueprint for the whole of MockMateAI: API, frontend, Postgres and
+# Redis, all from one "New -> Blueprint".
 #
-# Deploys the API only. The frontend is static and goes to Netlify
-# (netlify.toml); Postgres and Redis are external free tiers (Neon and
-# Upstash) rather than Render's own, because Render's free Postgres expires
-# after 90 days and Neon's does not.
+# Render's free Postgres expires (see Render's pricing page for the current
+# window) and its data goes with it. Fine for a demo; for anything longer,
+# delete the `databases:` block and point MOCKMATEAI_DB_URL at Neon instead
+# (DEPLOYMENT.md, step 1).
 #
-# See DEPLOYMENT.md for the values to paste into each of these.
+# See DEPLOYMENT.md for the values to paste into each `sync: false` variable.
 
 services:
   - type: web
@@ -26,14 +27,19 @@ services:
       - key: MOCKMATEAI_ENV
         value: production
 
-      # --- secrets: set these in the Render dashboard, never in git ---
-      # Neon connection string. Must start postgresql+psycopg:// for SQLAlchemy,
-      # not the postgresql:// Neon shows you.
+      # --- datastores, wired from the blueprint's own instances ---
+      # Render hands out postgresql://; config.py adds the psycopg driver.
       - key: MOCKMATEAI_DB_URL
-        sync: false
-      # Upstash redis:// URL (the TCP one, not the REST endpoint).
+        fromDatabase:
+          name: mockmateai-db
+          property: connectionString
       - key: MOCKMATEAI_REDIS_URL
-        sync: false
+        fromService:
+          type: keyvalue
+          name: mockmateai-redis
+          property: connectionString
+
+      # --- secrets: set these in the Render dashboard, never in git ---
       # The PEM contents, not paths -- there is no dev_keys/ directory here.
       - key: MOCKMATEAI_JWT_PRIVATE_KEY
         sync: false
@@ -61,3 +67,65 @@ services:
       # Must match a redirect URI registered in Google Cloud Console exactly.
       - key: MOCKMATEAI_OAUTH_REDIRECT_URI
         sync: false
+
+  # Static sites do not sleep, so the landing page loads at once even while
+  # the API above is waking up.
+  - type: web
+    name: mockmateai
+    runtime: static
+    rootDir: frontend
+    # The build also fetches Pyodide and the MediaPipe models (~50 MB); they
+    # are gitignored vendored runtimes, not source.
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Vite bakes this in at build time, so a change needs a redeploy. It
+      # must be the API's URL *including* /api/v1 -- the WebSocket URL is
+      # derived from it.
+      - key: VITE_API_BASE_URL
+        sync: false
+    # Single-page app: every path is served index.html so a deep link or a
+    # reload reaches React Router instead of a 404.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /pyodide/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /mediapipe/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      # The microphone and camera are the product; denying them here would
+      # disable the interview entirely.
+      - path: /*
+        name: Permissions-Policy
+        value: microphone=(self), camera=(self), geolocation=()
+
+  # Rate limits and live interview state. Not persisted on the free plan: a
+  # restart drops in-progress interviews, never accounts or reports.
+  - type: keyvalue
+    name: mockmateai-redis
+    plan: free
+    region: oregon
+    # Empty list = reachable only from this account's own services.
+    ipAllowList: []
+
+databases:
+  - name: mockmateai-db
+    plan: free
+    region: oregon
+    databaseName: mockmateai
+    user: mockmateai
