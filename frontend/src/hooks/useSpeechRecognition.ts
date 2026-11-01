@@ -84,6 +84,16 @@ export function useSpeechRecognition(callbacks: SpeechRecognitionCallbacks) {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const watchdogRef = useRef<number | undefined>(undefined);
   const finalTranscriptRef = useRef("");
+  /*
+   * Words the engine has heard but not yet marked final.
+   *
+   * They count as the answer. Chrome finalises a segment only at a pause it
+   * chooses, so a candidate who talks straight through and presses Done -- or
+   * whose engine finalises late -- had every word they said sitting here, shown
+   * in the caption and then discarded, and the report said "No answer
+   * recorded". Folded in wherever an instance is abandoned or the turn closes.
+   */
+  const interimTranscriptRef = useRef("");
   const confidencesRef = useRef<number[]>([]);
   const lastResultAtRef = useRef(0);
   const finishedRef = useRef(true);
@@ -107,7 +117,7 @@ export function useSpeechRecognition(callbacks: SpeechRecognitionCallbacks) {
       paused: pausedRef.current,
       closing: closingRef.current,
       isCurrent,
-      transcript: finalTranscriptRef.current,
+      transcript: finalTranscriptRef.current + interimTranscriptRef.current,
       startedAt: turnStartedAtRef.current,
       lastResultAt: lastResultAtRef.current,
       restarts: restartsRef.current,
@@ -147,7 +157,7 @@ export function useSpeechRecognition(callbacks: SpeechRecognitionCallbacks) {
     setIsListening(false);
     recognitionRef.current?.stop();
 
-    const transcript = finalTranscriptRef.current.trim();
+    const transcript = (finalTranscriptRef.current + interimTranscriptRef.current).trim();
     /*
      * Only real numbers are averaged.
      *
@@ -173,6 +183,13 @@ export function useSpeechRecognition(callbacks: SpeechRecognitionCallbacks) {
       if (action.type === "finish") finishTurn(true);
     }, WATCHDOG_INTERVAL_MS);
   }, [clearWatchdog, finishTurn, snapshot]);
+
+  const commitInterim = useCallback(() => {
+    if (interimTranscriptRef.current.trim()) {
+      finalTranscriptRef.current += `${interimTranscriptRef.current.trim()} `;
+    }
+    interimTranscriptRef.current = "";
+  }, []);
 
   const createRecognitionRef = useRef<(() => SpeechRecognition | null) | null>(null);
   // Lets start() hand a failed launch to the same retry path every other
@@ -252,6 +269,8 @@ export function useSpeechRecognition(callbacks: SpeechRecognitionCallbacks) {
       }
       restartsRef.current += 1;
       lastRestartAtRef.current = now;
+      // The instance being replaced takes its unfinalised words with it.
+      commitInterim();
       const next = createRecognitionRef.current?.();
       if (!next) return; // no constructor; the clock still owns the turn
       recognitionRef.current = next;
@@ -289,6 +308,7 @@ export function useSpeechRecognition(callbacks: SpeechRecognitionCallbacks) {
           interim += alternative.transcript;
         }
       }
+      interimTranscriptRef.current = interim;
       callbacksRef.current.onInterimTranscript?.((finalTranscriptRef.current + interim).trim());
     };
 
@@ -318,11 +338,12 @@ export function useSpeechRecognition(callbacks: SpeechRecognitionCallbacks) {
     };
 
     return recognition;
-  }, [finishTurn, snapshot]);
+  }, [commitInterim, finishTurn, snapshot]);
   createRecognitionRef.current = createRecognition;
 
   const start = useCallback(() => {
     finalTranscriptRef.current = "";
+    interimTranscriptRef.current = "";
     confidencesRef.current = [];
     lastResultAtRef.current = Date.now();
     finishedRef.current = false;
@@ -418,9 +439,11 @@ export function useSpeechRecognition(callbacks: SpeechRecognitionCallbacks) {
     pausedRef.current = true;
     window.clearTimeout(retryTimerRef.current);
     clearWatchdog();
+    // abort() discards what the instance had not finalised; keep it.
+    commitInterim();
     recognitionRef.current?.abort();
     setIsListening(false);
-  }, [clearWatchdog]);
+  }, [clearWatchdog, commitInterim]);
 
   /** Unmute: resumes into the same turn, appending to whatever was already captured. */
   const resumeListening = useCallback(() => {
